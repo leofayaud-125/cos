@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Mon OS</title>
+<style>
+:root{--c1:#00e5ff;--c2:#d500f9;--bg:#05030f;--fg:#e9ecff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+#wall{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 100%,#2a0f4a,transparent 65%),linear-gradient(#05030f,#120a30);overflow:hidden}
+#wall::after{content:"";position:absolute;left:-60%;right:-60%;bottom:0;height:46%;opacity:.3;transform:perspective(280px) rotateX(62deg);transform-origin:50% 100%;
+background:repeating-linear-gradient(90deg,var(--c1) 0 1px,transparent 1px 64px),repeating-linear-gradient(0deg,var(--c1) 0 1px,transparent 1px 40px);animation:g 3s linear infinite}
+@keyframes g{to{background-position:0 40px,0 40px}}
+@media (prefers-reduced-motion:reduce){#wall::after{animation:none}}
+#icons{position:absolute;left:0;top:0;right:0;bottom:56px;padding:18px;display:flex;flex-wrap:wrap;align-content:flex-start;gap:12px}
+.ic{width:96px;padding:12px 4px;text-align:center;border:0;border-radius:16px;background:rgba(255,255,255,.04);color:var(--fg);font:inherit;font-size:14px;cursor:pointer}
+.ic:active{background:rgba(255,255,255,.14)}
+.ic b{display:block;font-size:38px;margin-bottom:4px;filter:drop-shadow(0 0 8px var(--c1))}
+.win{position:absolute;width:min(330px,92vw);background:rgba(12,8,36,.95);border:2px solid var(--c1);border-radius:14px;box-shadow:0 0 22px var(--c1);overflow:hidden}
+.win header{display:flex;justify-content:space-between;align-items:center;padding:8px 8px 8px 14px;background:linear-gradient(90deg,var(--c1),var(--c2));color:#05030f;font-weight:700;touch-action:none;cursor:move}
+.win header button{border:0;background:rgba(0,0,0,.2);color:#05030f;font-size:18px;width:38px;height:34px;border-radius:8px}
+.body{padding:12px}
+textarea{width:100%;height:210px;background:#0a0620;color:var(--fg);border:1px solid var(--c1);border-radius:8px;padding:10px;font:inherit;resize:none;user-select:text;-webkit-user-select:text}
+.disp{background:#0a0620;border:1px solid var(--c1);border-radius:8px;padding:12px;font-size:26px;text-align:right;min-height:54px;margin-bottom:8px;overflow:hidden}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+button.k{border:1px solid var(--c1);background:rgba(255,255,255,.05);color:var(--fg);font:inherit;font-size:20px;height:46px;border-radius:10px}
+button.k:active{background:var(--c1);color:#05030f}
+.big{font-size:44px;text-align:center;font-variant-numeric:tabular-nums;margin:6px 0 12px;text-shadow:0 0 14px var(--c1)}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+canvas{display:block;margin:0 auto;border:1px solid var(--c1);border-radius:8px;background:#05030f;touch-action:none;max-width:100%}
+#bar{position:fixed;left:0;right:0;bottom:0;height:56px;display:flex;align-items:center;gap:8px;padding:0 10px;background:rgba(10,6,30,.9);border-top:2px solid var(--c1);box-shadow:0 -2px 20px var(--c1)}
+#bar .logo{font-weight:800;letter-spacing:.1em;text-shadow:0 0 10px var(--c1);padding-right:6px}
+#tasks{flex:1;display:flex;gap:6px;overflow-x:auto}
+.chip{border:1px solid var(--c1);background:rgba(255,255,255,.06);color:var(--fg);border-radius:10px;padding:8px 12px;font:inherit;font-size:14px;white-space:nowrap}
+#clock{font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+#quit{border:1px solid var(--c2);background:rgba(255,255,255,.06);color:var(--fg);border-radius:10px;padding:8px 12px;font:inherit}
+</style></head>
+<body>
+<div id="wall"></div>
+<div id="icons"></div>
+<div id="wins"></div>
+<div id="bar"><span class="logo">COs</span><div id="tasks"></div><span id="clock"></span><button id="quit">⏻ Quitter</button></div>
+<script>
+var Q=new URLSearchParams(location.search);
+if(Q.get('c1'))document.documentElement.style.setProperty('--c1','#'+Q.get('c1'));
+if(Q.get('c2'))document.documentElement.style.setProperty('--c2','#'+Q.get('c2'));
+function $(s){return document.querySelector(s)}
+function cs(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function el(t,c,txt){var e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e}
+function ld(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function sv(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function pad(n){return (n<10?'0':'')+n}
+var z=10,n=0,wins={};
+
+var APPS={
+notes:{t:'Notes',i:'📝',make:function(b){
+  var t=el('textarea');t.placeholder='Écris ici…';t.value=ld('cos_notes')||'';
+  t.oninput=function(){sv('cos_notes',t.value)};b.appendChild(t);}},
+calc:{t:'Calcul',i:'🧮',make:function(b){
+  var d=el('div','disp','0'),g=el('div','keys'),e='';
+  ['C','(',')','/','7','8','9','*','4','5','6','-','1','2','3','+','0','.','⌫','='].forEach(function(x){
+    var u=el('button','k',x);
+    u.onclick=function(){
+      if(x==='C')e='';
+      else if(x==='⌫')e=e.slice(0,-1);
+      else if(x==='='){try{if(/^[0-9+\-*\/().\s]+$/.test(e))e=String(Function('"use strict";return('+e+')')())}catch(_){e='Erreur'}}
+      else{if(e==='Erreur')e='';e+=x}
+      d.textContent=e||'0'};
+    g.appendChild(u)});
+  b.appendChild(d);b.appendChild(g);}},
+chrono:{t:'Chrono',i:'⏱️',make:function(b,o){
+  var d=el('div','big','00:00.0'),t0=0,acc=0,iv=null;
+  function ms(){return acc+(iv?Date.now()-t0:0)}
+  function up(){var m=ms();d.textContent=pad(Math.floor(m/60000))+':'+pad(Math.floor(m/1000)%60)+'.'+Math.floor(m%1000/100)}
+  var go=el('button','k','Start'),rs=el('button','k','Reset');go.style.width=rs.style.width='110px';
+  go.onclick=function(){if(iv){acc=ms();clearInterval(iv);iv=null;go.textContent='Start'}else{t0=Date.now();iv=setInterval(up,100);go.textContent='Pause'}up()};
+  rs.onclick=function(){clearInterval(iv);iv=null;acc=0;go.textContent='Start';up()};
+  var r=el('div','row');r.appendChild(go);r.appendChild(rs);b.appendChild(d);b.appendChild(r);
+  o.stop=function(){clearInterval(iv)}}},
+draw:{t:'Dessin',i:'🎨',make:function(b){
+  var c=el('canvas');c.width=300;c.height=210;var x=c.getContext('2d');x.fillStyle='#05030f';x.fillRect(0,0,300,210);
+  var col=cs('--c1'),on=false;x.lineWidth=4;x.lineCap='round';
+  function pt(e){var r=c.getBoundingClientRect();return [(e.clientX-r.left)*300/r.width,(e.clientY-r.top)*210/r.height]}
+  c.onpointerdown=function(e){on=true;c.setPointerCapture(e.pointerId);var p=pt(e);x.strokeStyle=col;x.shadowColor=col;x.shadowBlur=8;x.beginPath();x.moveTo(p[0],p[1]);x.lineTo(p[0]+.1,p[1])};
+  c.onpointermove=function(e){if(!on)return;var p=pt(e);x.lineTo(p[0],p[1]);x.stroke()};
+  c.onpointerup=c.onpointercancel=function(){on=false};
+  b.appendChild(c);
+  var r=el('div','row');
+  [cs('--c1'),cs('--c2'),'#ffffff','#39ff14','#ffea00','#ff1744'].forEach(function(k){
+    var s=el('button','k');s.style.cssText='width:38px;height:38px;background:'+k+';border-radius:50%';s.onclick=function(){col=k};r.appendChild(s)});
+  var cl=el('button','k','Effacer');cl.style.cssText='width:auto;padding:0 12px;height:38px';
+  cl.onclick=function(){x.shadowBlur=0;x.fillStyle='#05030f';x.fillRect(0,0,300,210)};
+  r.appendChild(cl);b.appendChild(r);}},
+snake:{t:'Snake',i:'🐍',make:function(b,o){
+  var c=el('canvas');c.width=c.height=240;var x=c.getContext('2d');
+  var sn,dr,nx,fd,sc,dead;
+  function pf(){do{fd=[Math.random()*16|0,Math.random()*16|0]}while(sn.some(function(p){return p[0]==fd[0]&&p[1]==fd[1]}))}
+  function rs(){sn=[[8,8],[7,8],[6,8]];dr=[1,0];nx=[1,0];sc=0;dead=false;pf();dw()}
+  function dw(){x.fillStyle='#05030f';x.fillRect(0,0,240,240);
+    x.fillStyle=cs('--c2');x.fillRect(fd[0]*15+2,fd[1]*15+2,11,11);
+    x.fillStyle=cs('--c1');sn.forEach(function(p){x.fillRect(p[0]*15+1,p[1]*15+1,13,13)});
+    x.fillStyle='#fff';x.font='14px monospace';x.fillText('Score '+sc+(dead?' - touche pour rejouer':''),6,14)}
+  function st(){if(dead)return;dr=nx;var h=[sn[0][0]+dr[0],sn[0][1]+dr[1]];
+    if(h[0]<0||h[1]<0||h[0]>15||h[1]>15||sn.some(function(p){return p[0]==h[0]&&p[1]==h[1]})){dead=true;dw();return}
+    sn.unshift(h);if(h[0]==fd[0]&&h[1]==fd[1]){sc++;pf()}else sn.pop();dw()}
+  function go(a,d){if(a+dr[0]!==0||d+dr[1]!==0)nx=[a,d]}
+  var sx=0,sy=0;
+  c.onpointerdown=function(e){sx=e.clientX;sy=e.clientY;if(dead)rs()};
+  c.onpointerup=function(e){var dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)<12&&Math.abs(dy)<12)return;
+    if(Math.abs(dx)>Math.abs(dy))go(dx>0?1:-1,0);else go(0,dy>0?1:-1)};
+  b.appendChild(c);
+  var r=el('div','row');
+  [['◀',-1,0],['▲',0,-1],['▼',0,1],['▶',1,0]].forEach(function(a){
+    var k=el('button','k',a[0]);k.style.width='54px';k.onclick=function(){go(a[1],a[2])};r.appendChild(k)});
+  b.appendChild(r);rs();var iv=setInterval(st,130);o.stop=function(){clearInterval(iv)}}}
+};
+
+function tasks(){
+  var t=$('#tasks');t.innerHTML='';
+  Object.keys(wins).forEach(function(id){
+    var c=el('button','chip',APPS[id].i+' '+APPS[id].t);
+    c.onclick=function(){wins[id].el.style.zIndex=++z};t.appendChild(c)})}
+
+function openApp(id){
+  if(wins[id]){wins[id].el.style.zIndex=++z;return}
+  var a=APPS[id],w=el('div','win'),h=el('header'),o={};
+  h.appendChild(el('span','',a.i+' '+a.t));
+  var x=el('button','',"✕");h.appendChild(x);
+  var b=el('div','body');w.appendChild(h);w.appendChild(b);
+  w.style.left=((n*34)%220+24)+'px';w.style.top=((n*34)%160+20)+'px';w.style.zIndex=++z;n++;
+  a.make(b,o);
+  x.onclick=function(){if(o.stop)o.stop();w.remove();delete wins[id];tasks()};
+  var dx=0,dy=0,dr=false;
+  h.onpointerdown=function(e){if(e.target===x)return;dr=true;dx=e.clientX-w.offsetLeft;dy=e.clientY-w.offsetTop;w.style.zIndex=++z;h.setPointerCapture(e.pointerId)};
+  h.onpointermove=function(e){if(dr){w.style.left=(e.clientX-dx)+'px';w.style.top=Math.max(0,e.clientY-dy)+'px'}};
+  h.onpointerup=h.onpointercancel=function(){dr=false};
+  $('#wins').appendChild(w);wins[id]={el:w};tasks()}
+
+Object.keys(APPS).forEach(function(id){
+  var b=el('button','ic');b.innerHTML='<b>'+APPS[id].i+'</b>'+APPS[id].t;b.onclick=function(){openApp(id)};$('#icons').appendChild(b)});
+$('#quit').onclick=function(){if(window.Android)Android.exit()};
+setInterval(function(){var d=new Date();$('#clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())},1000);
+(function(){var d=new Date();$('#clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())})();
+</script>
+</body></html>

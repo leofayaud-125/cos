@@ -1,0 +1,12 @@
+COs — projet Android (WebView)
+
+Option A — Android Studio
+1. Ouvre ce dossier dans Android Studio.
+2. Build > Build APK(s). L'APK est dans app/build/outputs/apk/debug/.
+
+Option B — GitHub (sans PC)
+1. Crée un dépôt GitHub et envoie tout le contenu du ZIP.
+2. Onglet Actions > "Build APK" > télécharge l'artefact "apk".
+
+Pour changer le HTML : remplace app/src/main/assets/index.html.
+Les fichiers annexes (images, JS, sons) vont dans le même dossier assets.
