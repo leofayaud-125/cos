@@ -100,6 +100,20 @@ canvas{display:block;margin:0 auto;border:1px solid var(--c1);border-radius:8px;
 .win.gfs .gbb{border-color:var(--c1);box-shadow:0 0 10px var(--c1),inset 0 0 7px rgba(0,229,255,.35)}
 .win.gfs .gbb.on{box-shadow:0 0 22px var(--c2),inset 0 0 10px rgba(255,255,255,.45)}
 .win.gfs .qmb{top:10px;right:10px}
+.pcbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.pcbar button{margin:0;width:auto;flex:0 0 auto;padding:8px 12px}
+.pcpath{font-size:13px;opacity:.85;margin:4px 0 8px;word-break:break-all}
+.pcrow{display:flex;align-items:center;gap:10px;margin:0;padding:8px 10px;border-radius:8px;color:var(--fg);cursor:default}
+.pcrow:hover,.pcrow:active{background:rgba(255,255,255,.1)}
+.pcrow b{font-size:24px;width:30px;text-align:center}
+.pcrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcrow small{opacity:.6}
+.pcrow .mo{margin:0;width:38px;padding:4px;background:transparent;border:0;color:var(--fg);font-size:18px}
+.pcprev{width:100%;max-height:60vh;display:block;margin:6px 0;object-fit:contain}
+.pced{width:100%;min-height:42vh;box-sizing:border-box;background:#0a0620;color:var(--fg);border:1px solid var(--c1);border-radius:8px;padding:8px;font:13px monospace;user-select:text;-webkit-user-select:text}
+.qm input{width:min(280px,86vw);padding:12px;border-radius:10px;border:1px solid var(--c1);background:#0a0620;color:var(--fg);font:inherit;user-select:text;-webkit-user-select:text;box-sizing:border-box}
+.busy #wall::after{animation:none}
+.busy .win{box-shadow:0 0 6px var(--c1)}
 </style></head>
 <body>
 <div id="wall"></div>
@@ -23234,7 +23248,7 @@ function GB(rom,fb,pal){
     if(ly<144){
       if(lcyc<80){if(pmode!=2)setMode(2)}
       else if(lcyc<252){if(pmode!=3)setMode(3)}
-      else if(pmode!=0){setMode(0);renderLine();if(hOn){hdma(16);hLen-=16;if(hLen<=0){hLen=0;hOn=false}}}
+      else if(pmode!=0){setMode(0);if(!self.skip)renderLine();if(hOn){hdma(16);hLen-=16;if(hLen<=0){hLen=0;hOn=false}}}
     }
   }
   function step(){
@@ -23255,10 +23269,14 @@ function GB(rom,fb,pal){
     if(self.audio)apuRun(pcy);
     return c;
   }
+  var sl=0,sc=0,ft=8,fcn=0;this.skip=false;
   this.frame=function(){
-    var n=0;frameDone=false;
+    var a=performance.now(),n=0;this.skip=sl>0&&(sc++%(sl+1))!=0;frameDone=false;
     while(!frameDone&&n<300000){n+=step()}
     this.frames++;
+    ft=ft*.92+(performance.now()-a)*.08;
+    if(++fcn%30==0){if(ft>15&&sl<3)sl++;else if(ft<6.5&&sl>0)sl--}
+    this.skipLvl=sl;
   };
   this.press=function(bit,down){
     if(down){if(!(pad&(1<<bit))){pad|=(1<<bit);io[0x0F]|=0x10}}else pad&=~(1<<bit);
@@ -23481,7 +23499,7 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
     spn=ac.createScriptProcessor(2048,0,2);
     spn.onaudioprocess=function(e){
       var L=e.outputBuffer.getChannelData(0),R=e.outputBuffer.getChannelData(1),n=L.length,i;
-      if(!g||!g.audio||o.paused){for(i=0;i<n;i++){L[i]=0;R[i]=0}return}
+      if(!g||!g.audio||o.paused||o.hidden){for(i=0;i<n;i++){L[i]=0;R[i]=0}return}
       var gd=0;while(g.avail()<n&&gd++<6)g.frame();
       var got=g.read(L,R,n);
       for(i=got;i<n;i++){L[i]=0;R[i]=0}
@@ -23538,7 +23556,7 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
   function loop(t){
     raf=requestAnimationFrame(loop);
     pollPad();
-    if(!g||o.paused){last=t;return}
+    if(!g||o.paused||o.hidden){last=t;return}
     var run=ac&&ac.state==='running';
     g.audio=!!run;
     if(run){
@@ -23549,11 +23567,12 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
     acc+=Math.min(t-last,50);last=t;
     var n=0;while(acc>=16.74&&n<3){for(var q2=0;q2<mult();q2++)g.frame();acc-=16.74;n++}
     if(n){ctx.putImageData(img,0,0);if(++fr%180==0){save();if(fr%3600==0)autoSave()}}}
+  o.loadRom=function(buf,name){load(buf,name)};
   setPal();raf=requestAnimationFrame(loop);
   o.stop=function(){cancelAnimationFrame(raf);removeEventListener('keydown',kd);removeEventListener('keyup',ku);removeEventListener('gamepadconnected',gc);removeEventListener('gamepaddisconnected',gd);autoSave();save();if(spn){spn.onaudioprocess=null;try{spn.disconnect()}catch(e){}}if(ac){try{ac.close()}catch(e){}}}}}
 ,gba:{t:'Game Boy Advance',i:'🕹️',w:440,make:function(b,o){
   var cv=el('canvas');cv.width=240;cv.height=160;cv.style.cssText='width:100%;image-rendering:pixelated;background:#000;display:block';
-  var ctx=cv.getContext('2d'),img=ctx.createImageData(240,160),px=img.data,emu=null,ac=null,spn=null,raf=0,last=0,acc=0,t0=Date.now(),bios=null,rom=null,muted=false,sv0=0;
+  var ctx=cv.getContext('2d'),img=ctx.createImageData(240,160),px=img.data,emu=null,ac=null,spn=null,raf=0,last=0,acc=0,t0=Date.now(),bios=null,rom=null,muted=false,sv0=0,sk=0,fc=0,cn=0,ema=8,gname='';
   for(var i0=3;i0<px.length;i0+=4)px[i0]=255;ctx.putImageData(img,0,0);
   var st=el('div','gbst','');
   function say(m){st.textContent=m}
@@ -23561,7 +23580,10 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
   function unb(s){var r=atob(s),u=new Uint8Array(r.length),i;for(i=0;i<r.length;i++)u[i]=r.charCodeAt(i);return u}
   try{var bs=localStorage.getItem('cos_gba_bios');if(bs)bios=unb(bs)}catch(e){}
   say(bios?'Charge une ROM (.gba)':'Charge d’abord le BIOS GBA (gba_bios.bin, 16 Ko), puis une ROM (.gba)');
-  var gfx={copyBuffer:function(buf){for(var i=0,j=0;i<115200;i+=3,j+=4){px[j]=buf[i];px[j+1]=buf[i+1];px[j+2]=buf[i+2]}ctx.putImageData(img,0,0)}};
+  function splash(a,c2){ctx.fillStyle='#000';ctx.fillRect(0,0,240,160);ctx.fillStyle='#9ff';ctx.font='11px sans-serif';ctx.textAlign='center';ctx.fillText(a,120,76);ctx.fillStyle='#bbb';ctx.fillText(c2||'',120,94)}
+  splash(bios?'Aucun jeu chargé':'BIOS manquant',bios?'Appuie sur 📂 ROM (.gba)':'Appuie sur 🧩 BIOS (gba_bios.bin)');
+  var px32=new Uint32Array(px.buffer);
+  var gfx={copyBuffer:function(buf){for(var i=0,j=0;i<115200;i+=3,j++)px32[j]=0xFF000000|(buf[i+2]<<16)|(buf[i+1]<<8)|buf[i];ctx.putImageData(img,0,0)}};
   function saveEx(n,d){try{localStorage.setItem('cos_gba_'+n,b64(d))}catch(e){}}
   function saveIm(n,ok,ko){var v=null;try{v=localStorage.getItem('cos_gba_'+n)}catch(e){}if(v)ok(unb(v));else ko()}
   var mx={buf:new Float32Array(65536),sz:65536,rp:0,wp:0,cnt:0,rate:44100,frac:0,
@@ -23589,6 +23611,7 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
     if(!window.GameBoyAdvanceEmulator){
       try{var s=document.createElement('script');s.text=$('#iodine').textContent;document.head.appendChild(s)}catch(e){}
       if(!window.GameBoyAdvanceEmulator){say('Impossible de charger le cœur GBA');return}}
+    if(!window.__gbaPatched){var P=GameBoyAdvanceGraphicsRenderer.prototype,r0=P.renderScanLine,p0=P.prepareFrame;P.renderScanLine=function(){if(window.__gbaSkip){this.updateReferenceCounters();return}return r0.call(this)};P.prepareFrame=function(){if(window.__gbaSkip)return;return p0.call(this)};window.__gbaPatched=1}
     if(emu){try{emu.stop()}catch(e){}}
     emu=new GameBoyAdvanceEmulator();
     emu.toggleOffthreadGraphics(false);emu.toggleSkipBootROM(true);
@@ -23598,17 +23621,22 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
     emu.attachAudioHandler(mx);if(ac)emu.enableAudio();
     emu.play();
     if((emu.emulatorStatus&1)==0){say('Échec : BIOS ou ROM invalide');emu=null;return}
-    say(emu.getGameName()||'En cours');acc=0;last=performance.now()}
+    gname=emu.getGameName()||'En cours';say(gname);acc=0;sk=0;fc=0;cn=0;ema=8;window.__gbaSkip=false;last=performance.now()}
   function loop(t){
     raf=requestAnimationFrame(loop);
-    if(!emu||o.paused){last=t;return}
-    acc+=Math.min(t-last,100);last=t;var n=0;
-    while(acc>=16&&n<3){emu.timerCallback(Date.now()-t0);acc-=16;n++}
+    if(!emu||o.paused||o.hidden){last=t;return}
+    acc+=Math.min(t-last,50);last=t;var n=0;
+    while(acc>=16&&n<2){
+      window.__gbaSkip=sk>0&&(fc++%(sk+1))!=0;
+      var a0=performance.now();emu.timerCallback(Date.now()-t0);ema=ema*.9+(performance.now()-a0)*.1;
+      acc-=16;n++;
+      if(++cn%30==0){if(ema>16.5&&sk<3)sk++;else if(ema<8&&sk>0)sk--;say(gname+' · '+Math.round(ema)+' ms/img · saut '+sk)}}
+    if(acc>32)acc=32;
     if(n&&++sv0%180==0)emu.exportSave()}
   var fr=el('input');fr.type='file';fr.style.display='none';
   fr.onchange=function(){var f=fr.files[0];if(!f)return;var r=new FileReader();r.onload=function(){rom=new Uint8Array(r.result);start()};r.readAsArrayBuffer(f);fr.value=''};
   var fb=el('input');fb.type='file';fb.style.display='none';
-  fb.onchange=function(){var f=fb.files[0];if(!f)return;var r=new FileReader();r.onload=function(){var u=new Uint8Array(r.result);if(u.length!==16384){say('BIOS invalide : il faut 16 384 octets');return}bios=u;try{localStorage.setItem('cos_gba_bios',b64(u))}catch(e){}say('BIOS chargé ✔');if(rom)start()};r.readAsArrayBuffer(f);fb.value=''};
+  fb.onchange=function(){var f=fb.files[0];if(!f)return;var r=new FileReader();r.onload=function(){var u=new Uint8Array(r.result);if(u.length!==16384){say('BIOS invalide : il faut 16 384 octets');return}bios=u;try{localStorage.setItem('cos_gba_bios',b64(u))}catch(e){}say('BIOS chargé ✔');splash('BIOS chargé ✔','Appuie sur 📂 ROM (.gba)');if(rom)start()};r.readAsArrayBuffer(f);fb.value=''};
   var lb=el('button','k','📂 ROM'),bb=el('button','k','🧩 BIOS'),rs=el('button','k','↺ Reset'),mb=el('button','k','🔊');
   lb.onclick=function(){initAudio();fr.click()};bb.onclick=function(){fb.click()};
   rs.onclick=function(){if(rom)start()};
@@ -23633,8 +23661,76 @@ snake:{t:'Snake',i:'🐍',make:function(b,o){
   function kd(e){var k=KM[e.key];if(k!=null&&emu&&act==='gba'&&!(e.target&&e.target.tagName==='INPUT')){emu.keyDown(k);e.preventDefault()}}
   function ku(e){var k=KM[e.key];if(k!=null&&emu&&act==='gba'&&!(e.target&&e.target.tagName==='INPUT')){emu.keyUp(k);e.preventDefault()}}
   addEventListener('keydown',kd);addEventListener('keyup',ku);
+  o.loadRom=function(buf,name){rom=new Uint8Array(buf);start()};
   raf=requestAnimationFrame(loop);
-  o.stop=function(){cancelAnimationFrame(raf);removeEventListener('keydown',kd);removeEventListener('keyup',ku);try{if(emu)emu.stop()}catch(e){}if(spn){spn.onaudioprocess=null;try{spn.disconnect()}catch(e){}}if(ac){try{ac.close()}catch(e){}}}
+  o.stop=function(){cancelAnimationFrame(raf);removeEventListener('keydown',kd);removeEventListener('keyup',ku);window.__gbaSkip=false;try{if(emu)emu.stop()}catch(e){}if(spn){spn.onaudioprocess=null;try{spn.disconnect()}catch(e){}}if(ac){try{ac.close()}catch(e){}}}
+}}
+,pc:{t:'Ce PC',i:'🖥️',w:560,make:function(b,o){
+  var w=b.parentNode,cur=0,trail=[],urls=[],items=[],view=el('div'),bar=el('div','pcbar'),pth=el('div','pcpath'),st=el('div','gbst',''),sh=el('div','qm');
+  var dbp=new Promise(function(ok,ko){var r=indexedDB.open('cos_fs',1);r.onupgradeneeded=function(){var s=r.result.createObjectStore('n',{keyPath:'id',autoIncrement:true});s.createIndex('p','parent')};r.onsuccess=function(){ok(r.result)};r.onerror=function(){ko(r.error)}});
+  function tx(mode,f){return dbp.then(function(d){return new Promise(function(ok,ko){var t=d.transaction('n',mode),r=f(t.objectStore('n'));t.oncomplete=function(){ok(r&&r.result)};t.onerror=t.onabort=function(){ko(t.error)}})})}
+  function list(p){return tx('readonly',function(s){return s.index('p').getAll(p)})}
+  function put(n){return tx('readwrite',function(s){return s.put(n)})}
+  function rmTree(id){return list(id).then(function(ch){return Promise.all(ch.map(function(c){return c.type==='dir'?rmTree(c.id):tx('readwrite',function(s){return s.delete(c.id)})}))}).then(function(){return tx('readwrite',function(s){return s.delete(id)})})}
+  function ext(n){var m=/\.([^.]+)$/.exec(n);return m?m[1].toLowerCase():''}
+  function icon(n){if(n.type==='dir')return '📁';var e=ext(n.name);if(e==='gb'||e==='gbc')return '🎮';if(e==='gba')return '🕹️';if(/^(png|jpe?g|gif|webp|bmp|svg)$/.test(e))return '🖼️';if(/^(mp3|ogg|wav|m4a|flac)$/.test(e))return '🎵';if(/^(mp4|webm|mkv)$/.test(e))return '🎬';if(/^(txt|md|json|js|html|css|csv|log)$/.test(e))return '📄';if(e==='apk')return '📦';return '📎'}
+  function fmt(n){return n<1024?n+' o':n<1048576?(n/1024).toFixed(0)+' Ko':n<1073741824?(n/1048576).toFixed(1)+' Mo':(n/1073741824).toFixed(2)+' Go'}
+  function uniq(name,sibs){var b=name.replace(/(\.[^.]*)?$/,''),x=(/(\.[^.]*)$/.exec(name)||[''])[0],n=name,i=2;while(sibs.some(function(s){return s.name===n}))n=b+' ('+(i++)+')'+x;return n}
+  function revoke(){urls.forEach(function(u){URL.revokeObjectURL(u)});urls=[]}
+  function usage(){if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(function(e){st.textContent=items.length+' élément(s) · stockage du navigateur : '+fmt(e.usage||0)+' / '+fmt(e.quota||0)})}
+  function show(){
+    revoke();view.innerHTML='';pth.textContent='Ce PC'+trail.map(function(t){return ' › '+t.name}).join('');
+    list(cur).then(function(a){
+      items=a.sort(function(x,y){return (x.type===y.type?0:x.type==='dir'?-1:1)||x.name.localeCompare(y.name)});
+      if(!items.length)view.appendChild(el('div','gbst','Dossier vide : appuie sur 📥 Importer'));
+      items.forEach(function(n){
+        var r=el('div','pcrow'),mo=el('button','mo','⋯');
+        r.appendChild(el('b','',icon(n)));r.appendChild(el('span','nm',n.name));r.appendChild(el('small','',n.type==='dir'?'':fmt(n.size||0)));r.appendChild(mo);
+        r.onclick=function(e){if(e.target===mo)return;openNode(n)};
+        mo.onclick=function(){sheet(n)};
+        view.appendChild(r)});
+      usage()})}
+  function launch(app,n){n.blob.arrayBuffer().then(function(buf){openApp(app);var x=wins[app];if(x&&x.o.loadRom)x.o.loadRom(buf,n.name)})}
+  function openNode(n){
+    if(n.type==='dir'){trail.push({id:n.id,name:n.name});cur=n.id;show();return}
+    var e=ext(n.name);
+    if(e==='gb'||e==='gbc'){launch('gb',n);return}
+    if(e==='gba'){launch('gba',n);return}
+    preview(n)}
+  function preview(n){
+    revoke();view.innerHTML='';var e=ext(n.name),bk=el('button','k','← Retour');bk.onclick=function(){show()};view.appendChild(bk);
+    function u(){var x=URL.createObjectURL(n.blob);urls.push(x);return x}
+    if(/^(png|jpe?g|gif|webp|bmp|svg)$/.test(e)){var im=el('img','pcprev');im.src=u();view.appendChild(im)}
+    else if(/^(mp3|ogg|wav|m4a|flac)$/.test(e)){var au=el('audio');au.controls=true;au.autoplay=true;au.src=u();au.style.width='100%';view.appendChild(au)}
+    else if(/^(mp4|webm|mkv)$/.test(e)){var v=el('video','pcprev');v.controls=true;v.src=u();view.appendChild(v)}
+    else if(/^(txt|md|json|js|html|css|csv|log)$/.test(e)){
+      var ta=el('textarea','pced'),sv=el('button','k','💾 Enregistrer');view.appendChild(sv);view.appendChild(ta);
+      n.blob.text().then(function(t){ta.value=t});
+      sv.onclick=function(){n.blob=new Blob([ta.value],{type:'text/plain'});n.size=n.blob.size;n.mtime=Date.now();put(n).then(function(){sv.textContent='✔ Enregistré'})}}
+    else view.appendChild(el('div','gbst','Ce format ne s’ouvre pas ici.'))}
+  function close(){sh.classList.remove('open')}
+  function sbtn(t,f){var x=el('button','',t);x.onclick=f;sh.appendChild(x)}
+  function ask(title,def,cb){
+    sh.innerHTML='';sh.appendChild(el('h3','',title));var i=el('input');i.value=def;sh.appendChild(i);
+    sbtn('OK',function(){var v=i.value.trim();if(!v)return;Promise.resolve(cb(v)).then(function(){close();show()})});sbtn('Annuler',close);sh.classList.add('open')}
+  function sheet(n){
+    sh.innerHTML='';sh.appendChild(el('h3','',n.name));
+    sbtn('📂 Ouvrir',function(){close();openNode(n)});
+    sbtn('✏️ Renommer',function(){ask('Nouveau nom',n.name,function(v){n.name=uniq(v,items.filter(function(s){return s.id!==n.id}));return put(n)})});
+    sbtn('🗑 Supprimer',function(){sh.innerHTML='';sh.appendChild(el('h3','','Supprimer « '+n.name+' » ?'));sbtn('Oui, supprimer',function(){rmTree(n.id).then(function(){close();show()})});sbtn('Annuler',close)});
+    sbtn('Fermer',close);sh.classList.add('open')}
+  var fi=el('input');fi.type='file';fi.multiple=true;fi.style.display='none';
+  fi.onchange=function(){var fs=[].slice.call(fi.files);fi.value='';if(!fs.length)return;
+    list(cur).then(function(a){var seq=Promise.resolve();fs.forEach(function(f){seq=seq.then(function(){var nm=uniq(f.name,a);a.push({name:nm});return put({parent:cur,name:nm,type:'file',size:f.size,mime:f.type,blob:f,mtime:Date.now()})})});return seq}).then(show).catch(function(){st.textContent='Import impossible (espace insuffisant ?)'})};
+  var up=el('button','k','⬆'),hm=el('button','k','🏠'),nf=el('button','k','➕ Dossier'),im2=el('button','k','📥 Importer');
+  up.onclick=function(){if(!trail.length)return;trail.pop();cur=trail.length?trail[trail.length-1].id:0;show()};
+  hm.onclick=function(){trail=[];cur=0;show()};
+  nf.onclick=function(){ask('Nom du dossier','Nouveau dossier',function(v){return list(cur).then(function(a){return put({parent:cur,name:uniq(v,a),type:'dir',size:0,mtime:Date.now()})})})};
+  im2.onclick=function(){fi.click()};
+  bar.appendChild(up);bar.appendChild(hm);bar.appendChild(nf);bar.appendChild(im2);
+  b.appendChild(bar);b.appendChild(fi);b.appendChild(pth);b.appendChild(view);b.appendChild(st);w.appendChild(sh);
+  list(0).then(function(a){if(a.length)return;return ['Documents','Jeux','Images','Musique','Vidéos','Téléchargements'].reduce(function(p,nm){return p.then(function(){return put({parent:0,name:nm,type:'dir',size:0,mtime:Date.now()})})},Promise.resolve())}).then(show).catch(function(){st.textContent='Stockage indisponible'});
+  o.stop=function(){revoke()}
 }}
 };
 
@@ -23660,13 +23756,14 @@ function gameUI(b,o,c){
 
 var act=null;
 function tasks(){
+  document.body.classList.toggle('busy',Object.keys(wins).some(function(k){return wins[k].el.classList.contains('gm')&&!wins[k].min}));
   var t=$('#tasks');t.innerHTML='';
   Object.keys(wins).forEach(function(id){
     var w=wins[id],c=el('button','chip'+(w.min?' mn':(act===id?' on':'')),APPS[id].i+' '+APPS[id].t);
     c.onclick=function(){if(w.min)restore(id);else if(act===id)minim(id);else foc(id)};t.appendChild(c)})}
 function foc(id){act=id;Object.keys(wins).forEach(function(k){wins[k].el.classList.toggle('act',k===id)});wins[id].el.style.zIndex=++z;tasks()}
-function minim(id){wins[id].min=true;wins[id].el.style.display='none';act=null;tasks()}
-function restore(id){wins[id].min=false;wins[id].el.style.display='';foc(id)}
+function minim(id){wins[id].o.hidden=true;wins[id].min=true;wins[id].el.style.display='none';act=null;tasks()}
+function restore(id){wins[id].o.hidden=false;wins[id].min=false;wins[id].el.style.display='';foc(id)}
 function togMax(id){wins[id].el.classList.toggle('max')}
 function closeStart(){$('#start').classList.remove('open');$('#sb').classList.remove('on')}
 function openApp(id){

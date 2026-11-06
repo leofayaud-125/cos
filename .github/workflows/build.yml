@@ -14,12 +14,22 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
-      - run: gradle assembleDebug
+      - name: Keystore
+        run: |
+          if [ ! -f release.jks ]; then
+            keytool -genkeypair -keystore release.jks -alias key -keyalg RSA -keysize 2048 -validity 10000 -storepass android123 -keypass android123 -dname "CN=COs"
+            git config user.name bot
+            git config user.email bot@users.noreply.github.com
+            git add release.jks
+            git commit -m keystore
+            git push
+          fi
+      - run: gradle assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/release/*.apk
       - name: Publier l'APK
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "v${{ github.run_number }}" app/build/outputs/apk/debug/*.apk --title "APK build ${{ github.run_number }}" --notes "APK debug"
+        run: gh release create "v${{ github.run_number }}" app/build/outputs/apk/release/*.apk --title "APK build ${{ github.run_number }}" --notes "APK debug"
